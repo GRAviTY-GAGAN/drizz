@@ -1,0 +1,21 @@
+{
+  "name": "drizz",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@slack/bolt": "^4.2.1",
+    "@slack/rtm-api": "^7.0.2",
+    "@slack/web-api": "^7.9.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
+    "fs": "^0.0.1-security",
+    "open": "^10.1.0"
+  }
+}
