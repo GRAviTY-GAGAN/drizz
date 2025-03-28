@@ -3,6 +3,7 @@ const express = require("express");
 const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
+const puppeteer = require("puppeteer");
 require("dotenv").config();
 
 const app = express();
@@ -24,7 +25,7 @@ app.listen(PORT, () => {
 let ffmpegProcess = null;
 
 async function startEmulatorSession() {
-  const emulatorURL = `https://appetize.io/app/${publicKey}?device=pixel7&osVersion=13.0&toolbar=true&autoplay=true`;
+  const emulatorURL = `https://appetize.io/app/${publicKey}?device=pixel7&osVersion=13.0&toolbar=true&autoplay=true&embed=true`;
   console.log("Opening emulator:", emulatorURL);
 
   const open = (await import("open")).default;
@@ -131,12 +132,126 @@ async function uploadRecordingToSlack(filePath) {
   }
 }
 
+function sendJSCommand(jsCode) {
+  const emulatorWindow = document.getElementById("appetize-iframe").contentWindow;
+  emulatorWindow.postMessage(
+    {
+      type: "javascript",
+      code: jsCode,
+    },
+    "*"
+  );
+}
+
 
 slackApp.message(/test/i, async ({ message, say }) => {
   console.log("Received 'test' command. Launching emulator...");
   await startEmulatorSession();
   await say("Launching emulator and recording...");
 });
+
+slackApp.message(/demo/i, async ({ message, say }) => {
+  console.log("Received 'demo' command. Launching emulator...");
+
+  automateAppetize().catch((err) => console.error(err));
+
+  // await startEmulatorSession();
+  // await say("Launching emulator... Please wait.");
+
+  // // Wait 5 seconds for the emulator to load the app
+  // setTimeout(() => {
+  //   console.log("Performing automated steps in the app...");
+
+  //   // 1️⃣ Type "Test Todo" in the input field
+  //   sendJSCommand(`
+  //     var input = document.querySelector('input[type="text"]');
+  //     if (input) {
+  //       input.value = "Test Todo";
+  //       var event = new Event('input', { bubbles: true });
+  //       input.dispatchEvent(event);
+  //       console.log('Entered text in Add Todo input');
+  //     } else {
+  //       console.log('❌ Input field not found');
+  //     }
+  //   `);
+
+  //   // 2️⃣ Click the "Add Todo" button
+  //   setTimeout(() => {
+  //     sendJSCommand(`
+  //       var addButton = document.querySelector('button');
+  //       if (addButton) {
+  //         addButton.click();
+  //         console.log('Clicked Add Todo button');
+  //       } else {
+  //         console.log('❌ Add Todo button not found');
+  //       }
+  //     `);
+  //   }, 2000);
+
+  //   // 3️⃣ Click "OK" on the alert popup
+  //   setTimeout(() => {
+  //     sendJSCommand(`
+  //       if (window.alert) {
+  //         window.alert = function() {
+  //           console.log('Intercepted alert popup');
+  //           var okButton = document.querySelector('button:contains("OK")');
+  //           if (okButton) {
+  //             okButton.click();
+  //             console.log('Clicked OK button on alert');
+  //           } else {
+  //             console.log('❌ OK button not found');
+  //           }
+  //         };
+  //       }
+  //     `);
+  //   }, 4000);
+
+  // }, 5000);
+});
+
+async function automateAppetize() {
+  const appetizeURL = `https://appetize.io/app/${process.env.APPETIZE_PUBLIC_KEY}?device=pixel7&osVersion=13.0&autoplay=true`;
+  console.log("🚀 Launching Puppeteer...");
+  
+  const browser = await puppeteer.launch({ headless: false }); // Set to true for headless mode
+  const page = await browser.newPage();
+
+  console.log("🌐 Opening Appetize emulator...");
+  await page.goto(appetizeURL, { waitUntil: "networkidle2" });
+
+  console.log("⏳ Waiting for emulator to load...");
+  await new Promise(resolve => setTimeout(resolve, 5000)); // Wait for the emulator to initialize
+
+  // 🔍 Click on the input field (update selector if needed)
+  console.log("🖱 Clicking on input field...");
+  await page.click("input"); 
+
+  // ⌨️ Type "Test Todo"
+  console.log("⌨️ Typing 'Test Todo'...");
+  await page.type("input", "Test Todo");
+
+  // 🖱 Click on "Add Todo" button (update selector if needed)
+  console.log("🖱 Clicking 'Add Todo' button...");
+  await page.click("button#add-todo"); // Adjust selector if necessary
+
+  // ⏳ Wait for alert to appear
+  console.log("⏳ Waiting for alert...");
+  await page.waitForTimeout(2000);
+
+  // 🖱 Click on "OK" button in alert
+  console.log("🖱 Clicking 'OK'...");
+  page.on("dialog", async (dialog) => {
+    await dialog.accept();
+    console.log("✅ Alert closed.");
+  });
+
+  // 📸 Take a screenshot
+  console.log("📸 Taking screenshot...");
+  await page.screenshot({ path: "result.png" });
+
+  console.log("✅ Automation complete!");
+  await browser.close();
+}
 
 (async () => {
   await slackApp.start();
