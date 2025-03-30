@@ -51,11 +51,11 @@ function startRecording() {
     console.log(`FFmpeg log: ${data}`);
   });
 
-  // Stop recording after 20 seconds
-  // setTimeout(() => {
-  //   console.log({ outputFilePath }, "outputFilePath------------1");
-  //   stopRecording(outputFilePath);
-  // }, 10000);
+  // Stop recording after 10 seconds
+  setTimeout(() => {
+    console.log({ outputFilePath }, "outputFilePath------------1");
+    stopRecording(outputFilePath);
+  }, 10000);
 }
 
 function stopRecording(outputFilePath) {
