@@ -38,24 +38,28 @@ function startRecording() {
     return;
   });
 
-    ffmpegProcess = spawn("ffmpeg", [
-      "-y",
-      "-video_size", "1920x1080",
-      "-framerate", "30",
-      "-f", "gdigrab",
-      "-i", "desktop",
-      outputFilePath
-    ]);
+  ffmpegProcess = spawn("ffmpeg", [
+    "-y",
+    "-video_size",
+    "1920x1080",
+    "-framerate",
+    "30",
+    "-f",
+    "gdigrab",
+    "-i",
+    "desktop",
+    outputFilePath,
+  ]);
 
   ffmpegProcess.stderr.on("data", (data) => {
     console.log(`FFmpeg log: ${data}`);
   });
 
   // Stop recording after 10 seconds
-  setTimeout(() => {
-    console.log({ outputFilePath }, "outputFilePath------------1");
-    stopRecording(outputFilePath);
-  }, 10000);
+  // setTimeout(() => {
+  //   console.log({ outputFilePath }, "outputFilePath------------1");
+  //   stopRecording(outputFilePath);
+  // }, 10000);
 }
 
 function stopRecording(outputFilePath) {
@@ -133,6 +137,16 @@ slackApp.message(/test/i, async ({ message, say }) => {
   await say("Launching emulator and recording...");
 
   // await startRecording();
+});
+
+slackApp.message(/ios eval/i, async ({ message, say }) => {
+  console.log("Received ios test command. launching emulator...");
+  await say("Launching ios emulator and recording...");
+
+  const open = (await import("open")).default;
+  open(
+    "http://localhost:8080/index2.html",
+  );
 });
 
 app.post("/emu-ready", async (req, res) => {
