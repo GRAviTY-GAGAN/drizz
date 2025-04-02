@@ -1,13 +1,16 @@
 const { App } = require("@slack/bolt");
 const express = require("express");
-const path = require("path");
 const fs = require("fs");
 const { spawn } = require("child_process");
+const multer = require("multer");
+const { VertexAI } = require("@google-cloud/vertexai");
 require("dotenv").config();
+const path = require("path");
 
 const app = express();
 const PORT = 8080;
 
+const upload = multer({ limits: { fileSize: 150 * 1024 * 1024 } });
 app.use(express.json());
 
 const slackApp = new App({
@@ -24,6 +27,8 @@ const slackApp = new App({
 const slackChannel = process.env.SLACK_CHANNEL_ID;
 const publicKey = process.env.APPETIZE_PUBLIC_KEY;
 
+app.use(express.json({ limit: "150mb" }));
+app.use(express.urlencoded({ limit: "150mb", extended: true }));
 app.use(express.static(path.join(__dirname, "public")));
 
 let ffmpegProcess = null;
@@ -100,6 +105,54 @@ function stopRecording(outputFilePath) {
   }
 }
 
+async function getXYpositionFromGemini(bboxData, element) {
+  console.log("Getting X and Y position from Gemini.");
+  try {
+    const prompt = `Using the omniparse data:
+${bboxData}
+
+Extract the X and Y percentage values from the bbox field whose content field **exactly** matches the "${element}" text.
+
+Return the output as a JSON object with only keys 'x' and 'y', where the values are the integer percentages (remove decimals).
+
+To calculate the X and Y in terms of percentage follow:
+    bbox: [x_min, y_min, x_max, y_max]
+
+    x percentage: ((x_min+x_max)/2) * 100
+    y percentage: ((y_min+y_max)/2) * 100
+`;
+    console.log({ prompt });
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GOOGLE_API_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { responseMimeType: "application/json" },
+        }),
+      },
+    );
+
+    const data = await response.json();
+    const textResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!textResponse) {
+      console.error("Invalid response format from Gemini");
+      return undefined;
+    }
+
+    const parsedData = JSON.parse(textResponse);
+    console.log(`X and Y postion of ${element} element returned.`);
+
+    return parsedData[0];
+  } catch (error) {
+    console.error("Error from Gemini:", error);
+    return undefined;
+  }
+}
+
 async function uploadRecordingToSlack(filePath) {
   try {
     if (!fs.existsSync(filePath)) {
@@ -144,9 +197,7 @@ slackApp.message(/ios eval/i, async ({ message, say }) => {
   await say("Launching ios emulator and recording...");
 
   const open = (await import("open")).default;
-  open(
-    "http://localhost:8080/index2.html",
-  );
+  open("http://localhost:8080/index2.html");
 });
 
 app.post("/emu-ready", async (req, res) => {
@@ -166,6 +217,40 @@ app.post("/start-recording", async (req, res) => {
 app.post("/stop-recording", async (req, res) => {
   stopRecording();
   res.send({});
+});
+
+app.post("/screenshot", upload.single("image_file"), async (req, res) => {
+  try {
+    console.log(
+      "File received:",
+      req.file.originalname,
+      "Size:",
+      req.file.size,
+      `(~${(req.file.size / 1024).toFixed(2)} KB)`,
+    );
+
+    const { Client } = await import("@gradio/client");
+
+    console.log("Omniparser parding the image.");
+    const client = await Client.connect("microsoft/OmniParser-v2");
+    const result = await client.predict("/process", {
+      image_input: req.file.buffer,
+      box_threshold: 0.01,
+      iou_threshold: 0.01,
+      use_paddleocr: true,
+      imgsz: 640,
+    });
+    const { element } = req.query;
+
+    console.log(result.data);
+
+    const positionData = await getXYpositionFromGemini(result.data[1], element);
+
+    res.send({ result: positionData, omnidata: result.data });
+  } catch (error) {
+    console.error("Error in Omniparser:", error);
+    res.send({});
+  }
 });
 
 app.listen(PORT, async () => {
